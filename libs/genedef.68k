@@ -1,0 +1,124 @@
+; address constants
+reg_hwver equ $A10001
+ctrl_port equ $C00004
+data_port equ $C00000
+pad1_data equ $A10003
+pad1_ctrl equ $A10009
+z80_req equ $A11100
+z80_rst equ $A11200
+
+get_vmode macro 
+	if narg=0
+	btst #6, reg_hwver
+	else
+	move.b reg_hwver, \1
+	and.w $40, \1
+	if narg=2
+	lsr.w #(6-\2), \1
+	endif
+	endif
+	endm
+
+; io-helper routines
+pad1_init macro 
+	move.b #$40, pad1_data
+	move.b #$40, pad1_ctrl
+	endm
+z80_busreq macro 
+	move.w #$100,z80_req
+	move.w #$100,z80_rst
+	endm
+	
+
+
+planeA_last equ $46C0
+planeB_last equ $66C0
+
+
+
+
+
+; startup macros
+reset_check macro
+	tst.l	($A10008).l	; test port A control
+	bne.s	\1
+	tst.w	($A1000C).l	; test port C control
+	bne.s	\1
+	endm
+ram_clear macro
+	moveq #0, d0
+	lea ctrl_port, a0
+	lea data_port, a1
+	move.l #$8f028f02,(a0)
+	vdp_wrsram 0, (a0)
+	move.l d0, (a1)
+	vdp_wrcram 0, (a0)
+	moveq #31,d1
+@ram_clear1\@
+	move.l d0, (a1)
+	dbra d1, @ram_clear1\@
+	vdp_wrvram 0, (a0)
+	lea $ff0000, a0
+	move.w #16383,d1
+@ram_clear2\@
+	move.l d0,(a0)+
+	move.l d0,(a1)
+	dbra d1, @ram_clear2\@
+	endm
+
+
+
+; vram address calculation
+vdp_xxvram macros
+	move.l #(\1|((\2&$3FFF))<<16)|(\2>>14), \3
+vdp_wrvram macros
+	vdp_xxvram $40000000, \1, \2
+vdp_wrcram macros
+	vdp_xxvram $C0000000, \1, \2
+vdp_wrsram macros
+	vdp_xxvram $40000010, \1, \2
+vdp_wrplna macros
+	vdp_xxvram $40000003, \1, \2
+vdp_wrplnb macros
+	vdp_xxvram $60000003, \1, \2
+
+; plane calculation
+vdp_plane_xy macro
+	lsl.w #6,\2
+	add.w \3,\2
+	lsl.w #1,\2
+	or.w \1, \2
+	swap \2
+	move.w #3, \2
+	if narg>3
+	move.l \2, \4
+	endif
+	endm
+vdp_planeA_xy macros
+	vdp_plane_xy #$4000, \1, \2, \3
+vdp_planeB_xy macros
+	vdp_plane_xy #$6000, \1, \2, \3
+	
+vdp_plane_next macro
+	swap \1
+	if narg=3
+	cmp.w \2, \1
+	bcc.s \3
+	endif
+	and.w #$ff80,\1
+	add.w #$0080,\1
+	swap \1
+	if narg=2
+	move.l \1, \2
+	endif
+	endm
+	
+; Address ranges
+AddrRng macros
+	move.w #((\2-\1)/\3), \4
+DbraRng macros
+	move.w #(((\2-\1)/\3)-1), \4
+PalRng macros
+	DbraRng \1, \2, 2, \3
+TileRng macros
+	DbraRng \1, \2, 32, \3

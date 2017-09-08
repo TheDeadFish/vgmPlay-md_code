@@ -1,0 +1,34 @@
+*---------------------------------------------------
+*VDP Setup routine - Nicked from Tiddo,s source code
+*---------------------------------------------------
+
+InitVDP:
+ LEA    InitVDPregs(pc), A0
+ MOVEQ  #18, D0
+NextReg:
+ MOVE.W (a0)+, ctrl_port
+ DBRA   D0, NextReg
+ rts	
+
+InitVDPregs:
+ DC.W   $8004    ; H int:OFF, Full palette, TV:enabled
+ DC.W   $8174    ; TV:ON, V int:ON, DMA:ON, Vres: 224 pixels
+ DC.W   $8238    ; Screen map A  location = Addr*8192 = E000 (5...3)
+ DC.W   $833E    ; Window        location = Addr*2048 = F800 (5...1)
+ DC.W   $8406    ; Screen map B  location = Addr*8192 = C000 (2...0)
+ DC.W   $8578    ; Sprite list   location = Addr*512  = F000 (6...0)
+ DC.W   $8700    ; Border color (00...3F)
+ DC.W   $8AFF    ; H int not generated
+ DC.W   $8B00    ; L2 int:OFF, H/V scroll whole screen
+ DC.W   $8C81    ; Hres: 320 pixels, Shadow:OFF, interlace:OFF
+ DC.W   $8D34    ; H scrolls     location = Addr*1024 = D000 (5...0)
+ DC.W   $8F02    ; VDP address increases WORD by WORD ...
+ DC.W   $9001    ; screen map A/B sizes - 64*32
+ DC.W   $9100    ; Window width
+ DC.W   $9200    ; Window height
+ DC.W   $9300    ; DMA word count L
+ DC.W   $9400    ; DMA word count H
+ DC.W   $9500    ; DMA source L
+ DC.W   $9600    ; DMA source M
+ DC.W   $9700    ; DMA source H
+

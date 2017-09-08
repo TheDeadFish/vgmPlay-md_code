@@ -1,0 +1,452 @@
+****************************************************************************
+*
+*	Main playing source for vgm play V3.00,  
+*	file version : 	0.01
+* 	created : 		~19/09/09
+*	modified :		12/12/12 
+*
+****************************************************************************
+
+;---- Register usage -----
+; d0,d1,d2,a0,a1 = temp regs
+;--- Address registers ---
+VGM_DATA		EQUR A4
+DAC_SAMPLES 	EQUR A5
+DELAY_RET 		EQUR A6
+;---- Data registers -----
+REG_WROTE		EQUR D6
+SAMPLE_LAG		EQUR D6
+CTRL_DELAY		EQUR D7
+;--- Stack based storage ---
+VAR1			EQU 0	;word
+VAR2			EQU 2	;word
+VAR3 			EQU 4	;word
+LOOP_ORG 		EQU 6	;long
+REPEAT_LOOPED	EQU	10	;long
+DAC_BASE		EQU	14	;long
+VGM_INITRAM		EQU 18	;18bytes
+VGM_MEMSIZE 	EQU 36
+;--------- VGM_INITRAM ---------
+PSG_REGS		equ			VGM_INITRAM+0	;4bytes
+PSG_STATE		equ			VGM_INITRAM+4	;1byte
+YM2612_NOTES	equ			VGM_INITRAM+5	;12bytes
+YM2612_DAC		equ 		VGM_INITRAM+17	;1byte
+
+DEBUG_WAIT:
+	move.l #2000000,d0
+DEBUG_WAIT1:
+	subq.l #1,d0
+	bne.s DEBUG_WAIT1
+	rts
+
+VGM_IERR:
+	moveq #1,d0 ; Vgm Error
+VGM_RET:
+	adda.l #VGM_MEMSIZE,a7
+	rts
+
+VGM_INIT:
+	suba.l #VGM_MEMSIZE,a7
+	cmpi.l #$56676320,(a0)
+	bne.s VGM_IERR
+	cmpi.l #$00000100,4(a0)
+	bne.s VGM_IERR
+	; display gd3 info
+	move.l 16(a0),a1
+	adda.l a0,a1
+	DISPLAY_GD3 a1, #9
+	; get loopPoint
+	moveq #-1,d0
+	move.l 12(a0),d1
+	beq.s VGM_INIT1
+	move.l a0,d0
+	add.l d1,d0
+VGM_INIT1:
+	move.l d0,LOOP_ORG(a7)
+	; get vgcData and sampData
+	adda.l 8(a0),a0
+	move.l (a0)+,d0
+	beq.s VGM_INIT2
+	move.l a0,DAC_SAMPLES
+	move.l a0,DAC_BASE(a7)
+	adda.l d0,a0
+
+VGM_INIT2:
+	move.l a0,VGM_DATA
+	move.l $8,REPEAT_LOOPED(a7)
+	; setup sound state regs
+	lea VGM_INITRAM_INIT(pc),a0
+	lea PSG_REGS(a7),a1
+	moveq #17,d0
+VGM_INIT3:
+	move.b (a0)+,(a1)+
+	dbra d0,VGM_INIT3
+	moveq #$00,REG_WROTE
+	bra VGM_PLAY
+	
+VGM_INITRAM_INIT:
+	dc.b $9f, $bf, $df, $ff, $9f, $00, $00, $00, $00, $00, $00
+	dc.b $00, $00, $00, $00, $00, $00, $80
+
+****************************************************************************
+*
+* Intialising play code
+*
+****************************************************************************
+
+; VAR1 = reg_wrote
+; VAR2 = delay_val
+
+YM2612_REGWRITE:; d0 port, d1 address, d2 data
+	move.l #$A04000,a0
+	adda.w d0,a0
+YM2612_REGWRITE1:
+	btst.b #7,(a0)
+	bne.s YM2612_REGWRITE1
+	move.b d1,(a0)+
+YM2612_REGWRITE2:
+	btst.b #7,(a0)
+	bne.s YM2612_REGWRITE2
+	move.b d2,(a0)
+	rts
+	
+; --- Normal Events Start ---	
+VGM_PLAY_DACW:
+	move.b d2,YM2612_DAC(a7)
+	bra VGM_PLAY_COMMON
+
+VGM_PLAY_NOTE:
+	lea YM2612_NOTES(a7),a0
+	move.b d2,d1
+	and.w #15,d2
+	cmp.w #4,d2
+	bcs.s VGM_PLAY_NOTE1
+	subq.w #1,d2
+VGM_PLAY_NOTE1: 
+	or.b d1,(a0,d2.w)
+	addq.w #6,d2
+	move.b d1,(a0,d2.w)
+	bra VGM_PLAY_COMMON
+
+VGM_PLAY_YMP0:
+	move.b (VGM_DATA)+,d1
+	move.b (VGM_DATA)+,d2
+	cmp.b #$2A,d1
+	beq.s VGM_PLAY_DACW
+	cmp.b #$28,d1
+	beq.s VGM_PLAY_NOTE
+	moveq #0,d0
+	bsr YM2612_REGWRITE	
+	bra VGM_PLAY_COMMON
+
+VGM_PLAY_YMP1:
+	move.b (VGM_DATA)+,d1
+	move.b (VGM_DATA)+,d2
+	moveq #2,d0
+	bsr YM2612_REGWRITE
+	bra VGM_PLAY_COMMON
+	
+VGM_PLAY_PSGP:
+	move.b (VGM_DATA)+,d0
+	move.b d0,d1
+	bmi.s VGM_PLAY_PSGP1
+	move.b PSG_STATE(a7),d1	
+VGM_PLAY_PSGP1:
+	move.b d1,PSG_STATE(a7)	
+	btst #4,d1
+	bne.s VGM_PLAY_PSGP2
+	move.b d0,$c00011
+	bra VGM_PLAY_COMMON
+VGM_PLAY_PSGP2:
+	and.w #$0060,d1
+	lsr.w #5,d1
+	move.b d0,PSG_REGS(a7,d1.w)
+	bra VGM_PLAY_COMMON
+
+VGM_PLAY_SEEK:
+	move.b (VGM_DATA)+,d0
+	swap d0
+	move.b (VGM_DATA)+,d0
+	lsl.w #8,d0
+	move.b (VGM_DATA)+,d0
+	move.l DAC_BASE(a7),DAC_SAMPLES
+	add.l d0,DAC_SAMPLES
+	bra VGM_PLAY_COMMON
+
+VGM_PLAY_DAC1_1:
+	move.b (DAC_SAMPLES)+,YM2612_DAC(a7)
+	bra VGM_PLAY_COMMON
+; --- Normal Events End ---
+
+; ------- Delay Event -----
+VGM_PLAY_DELAY
+	tst.b VAR1(a7) ; reg_wrote
+	bne.s VGM_PLAY_DELAYE
+	lsr.w #1,d1
+	adda.w d1,VGM_DATA
+	bra VGM_PLAY
+VGM_PLAY_DELAYE:
+	suba.w #1,VGM_DATA
+	bra VGM_PLAY_WRITE
+; ------ /Delay Event ----- 
+
+; ------ Other Events -----
+VGM_PLAY_OTHER:
+	and.w #$0f,d0 ; vgm end
+	beq VGM_ERROR
+	subq.w #1,d0 ; Game Gear PSG stereo
+	bne.s VGM_PLAY_OTHER1
+	adda.w #1,VGM_DATA
+	bra.s VGM_PLAY_PSGS
+VGM_PLAY_OTHER1:
+	subq.w #3,d0 ; wait 735/882 samples
+	bcc VGM_ERROR
+	moveq #0,d1
+	bra VGM_PLAY_DELAY
+; ---- /Other Events -----
+
+; ---- VGM_PLAY loop -----
+VGM_PLAY_COMMON:
+	move.w VAR2(a7),d0 ; delay_val
+	bne.s VGM_PLAY_WRITE
+VGM_PLAY_PSGS:
+	move.w #-1,VAR1(a7) ; reg_wrote
+	
+VGM_PLAY:
+	move.b (VGM_DATA)+,d0
+	move.b d0,d1
+	and.w #$0f,d0
+	move.w d0,VAR2(a7) ; delay_val
+	and.w #$f0,d1
+	lsr.w #3,d1
+	; ---- Only works for code at < 32K ----
+	move.w VGM_PLAY_TAB(pc, d1.w),a0
+	jmp (a0)
+	
+VGM_PLAY_TAB:
+	dc.w VGM_PLAY_DELAY
+	dc.w VGM_PLAY_DELAY
+	dc.w VGM_PLAY_DELAY
+	dc.w VGM_PLAY_YMP0
+	dc.w VGM_PLAY_YMP1
+	dc.w VGM_PLAY_PSGP
+	dc.w VGM_PLAY_SEEK
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_PLAY_DAC1_1
+	dc.w VGM_PLAY_OTHER
+; ---- VGM_PLAY loop -----
+
+VGM_PLAY_WRITE:
+	; Write Dac State
+	moveq #0,d0
+	moveq #$2A,d1
+	move.b YM2612_DAC(a7),d2
+	bsr YM2612_REGWRITE 
+
+	; Write YM2612 Note State (or)
+	lea YM2612_NOTES(a7),a1
+	moveq #5,d0
+	moveq #$28,d1
+VGM_PLAY_WRITE1:
+	move.b (a1)+,d2
+	beq.s VGM_PLAY_WRITE2
+	swap d0
+	bsr YM2612_REGWRITE
+	swap d0
+VGM_PLAY_WRITE2:
+	dbra d0,VGM_PLAY_WRITE1
+
+	; Write YM2612 Note State (move)
+	lea YM2612_NOTES(a7),a1
+	moveq #5,d0
+VGM_PLAY_WRITE3:
+	move.b 6(a1),d2
+	cmp.b (a1)+,d2
+	beq.s VGM_PLAY_WRITE4
+	swap d0
+	bsr YM2612_REGWRITE
+	swap d0
+VGM_PLAY_WRITE4:
+	dbra d0,VGM_PLAY_WRITE3
+	
+	; Write PSG Attenuation
+	lea PSG_REGS(a7),a0
+	moveq #4,d0
+VGM_PLAY_WRITE5:
+	move.b (a0)+,$c00011
+	dbra d0,VGM_PLAY_WRITE5
+
+; Initailise Remaining Registers
+	moveq #0,SAMPLE_LAG
+	lea PLAY_LOOP(pc),DELAY_RET
+	bra PLAY_LOOP
+
+****************************************************************************
+*
+* Main playing code
+*
+****************************************************************************
+
+; -------------- Normal Events --------------
+YMP0_WRITE: ; 54 clocks from start
+	move.l #$A04000,a0					;[12]
+	move.b (VGM_DATA)+,(a0)+			;[12]
+	bra.s REG_WRITE_END					;[10]
+	
+YMP1_WRITE: ; 54 clocks from start
+	move.l #$A04002,a0					;[12]
+	move.b (VGM_DATA)+,(a0)+			;[12]
+	bra.s REG_WRITE_END					;[10]
+
+PSGP_WRITE: ; 54 clocks from start
+	move.l #$C00011,a0					;[12]
+	lsr.w #8,d1							;[22]
+
+REG_WRITE_END: ; 88 clocks from start
+	lsr.l #7,d1							;[22]
+	; 110 clocks from start
+	move.b (VGM_DATA)+,(a0)				;[12]
+	lsr.l #1,d1							;[10]
+	and.w #$0f,d0						;[ 8]
+	bra DELAY_CODE						;[10]
+	
+SAMPLE_SEEK: ; 54 clocks from start
+	moveq #0,d1							;[ 4]
+	move.b (VGM_DATA)+,d1				;[ 8]
+	swap d1								;[ 4]
+	move.b (VGM_DATA)+,-(a7)			;[12]
+	move.w (a7)+,d1						;[ 8]
+	move.b (VGM_DATA)+,d1				;[ 8]
+	move.l DAC_BASE(a7),DAC_SAMPLES		;[16]
+	adda.l d1,DAC_SAMPLES				;[ 8]
+	; 122	clocks from start
+	lsr.l #1,d1							;[10]
+	and.w #$0f,d0						;[ 8]
+	bra DELAY_CODE						;[10]
+
+; ------------- Other Events ----------------
+VGM_OTHER: ; 54 clocks from start
+	and.w #$0f,d0						;[ 8]
+	bne.s NOT_VGM_END					;[ 8]
+	; 70 clocks from start			
+	move.l LOOP_ORG(a7), d1				;[16]
+	bmi.s VGM_EXIT						;[ 8]
+	move.l d1, VGM_DATA					;[ 4]
+	subq.l #1,REPEAT_LOOPED(a7)			;[24]
+	beq.s VGM_EXIT						;[ 8]
+	cmpa.l a0,a0						;[ 6]
+	moveq #0,d0							;[ 4]
+	bra DELAY_CODE						;[10]
+VGM_EXIT:
+	moveq #0,d0							
+	bra VGM_RET
+
+NOT_VGM_END: ; 72 clocks from start
+	subq.w #1,d0						;[ 4]
+	beq.s PSGS_WRITE					;[ 8]
+	subq.w #1,d0						;[ 4]
+	beq.s DELAY_60TH					;[ 8]
+	subq.w #1,d0						;[ 4]
+	beq.s DELAY_50TH					;[ 8]
+VGM_ERROR:
+	moveq #2,d0
+	bra VGM_RET
+PSGS_WRITE: ; 86 clocks from start
+	moveq #13,d0						;[ 4]
+	lsr.l d0,d0							;[34]
+	adda.w #1,VGM_DATA					;[12]
+	bra DELAY_CODE						;[10]
+
+; ------------ Delay Envents ----------------
+DELAY_COM_N: ; 76 clocks from start
+	lsr.w #8,d1							;[22]
+DELAY_COM_NN: ; 98 clocks from start
+	nop									;[ 4]
+DELAY_COM_NNNN: ; 102 clocks from start
+	lsr.l #3,d1							;[14]
+DELAY_COM60TH: ; 116 clocks from start
+	lsr.l #2,d1							;[12]
+DELAY_COM50TH: ; 128 clocks from start
+	lsr.w #1,d1							;[ 8]
+	bra DELAY_CODE						;[10]
+
+DELAY_60TH: ; 98 clocks from start
+	move.w #735,d0						;[ 8]
+	bra.s DELAY_COM60TH					;[10]
+	
+DELAY_50TH	; 110 clocks from start
+	move.w #882,d0						;[ 8]
+	bra.s DELAY_COM50TH					;[10]
+	
+VGM_DELAYN: ; 54 clocks from start 
+	and.w #$0f,d0						;[ 8]
+	addq.w #1,d0						;[ 4]
+	bra.s DELAY_COM_N					;[10]
+
+VGM_DELAYN_NN: ; 54 clocks from start 
+	moveq #15,d1						;[ 4]
+	and.w d1,d0							;[ 4]
+	move.b (VGM_DATA)+,d1				;[ 8]
+	lsl.w #4,d1							;[14]
+	or.w d1,d0							;[ 4]
+	bra.s DELAY_COM_NN					;[10]
+	
+VGM_DELAY_NNNN: ; 54 clocks from start 
+	move.b (VGM_DATA)+,d0				;[ 8]
+	lsl.w #8,d0							;[22]
+	move.b (VGM_DATA)+,d0				;[ 8]
+	bra.s DELAY_COM_NNNN				;[10]
+
+; ------------- Dac Events ------------------
+DAC_WRITE1_1: ; 54 clocks from start
+	move.l #$A04000,a0					;[12]
+	move.b #$2A,(a0)+					;[12]
+	moveq #10,d1						;[ 4]
+	lsr.l d1,d1							;[28]
+	; 110 clocks from start				
+	move.b (DAC_SAMPLES)+,(a0)			;[12]
+	lsr.l #1,d1							;[10]
+	and.w #$0f,d0						;[ 8]
+	bra DELAY_CODE						;[10]
+
+	include "vgmPlay\FullNibb.68k"
+	include "vgmPlay\HalfNibb.68k"
+	include "vgmPlay\QurtNibb.68k"
+	include "vgmPlay\AvSamp.68k"
+
+; ------------- Delay Code -----------------
+	include "vgmPlay\DelyCode.68k"
+	
+; ------------ PLAY_LOOP --------------------
+PLAY_LOOP:	;start counting from here,
+	move.b (VGM_DATA)+,d0				;[ 8]
+	move.b d0,d1						;[ 4]
+	and.w #$f0,d1						;[ 8]
+	lsr.w #3,d1							;[12]
+	; ---- Only works for code at < 32K ----
+	move.w JUMP_TABLE(pc, d1.w),a0		;[14]
+	jmp (a0)							;[ 8] 
+	
+JUMP_TABLE: ; 54 clocks from start
+	dc.w VGM_DELAYN
+	dc.w VGM_DELAYN_NN
+	dc.w VGM_DELAY_NNNN
+	dc.w YMP0_WRITE						
+	dc.w YMP1_WRITE						
+	dc.w PSGP_WRITE						
+	dc.w SAMPLE_SEEK
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w VGM_ERROR
+	dc.w DAC_WRITE_AVSAMP
+	dc.w DAC_WRITE1_8
+	dc.w DAC_WRITE1_4
+	dc.w DAC_WRITE1_2
+	dc.w DAC_WRITE1_1
+	dc.w VGM_OTHER

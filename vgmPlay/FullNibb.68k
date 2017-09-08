@@ -1,0 +1,59 @@
+****************************************************************************
+*
+*	Full nibble dac decoder for vgm play V3.00,  
+*	file version : 	0.01
+* 	created : 		24/09/09
+*	modified :		12/12/12 
+*
+****************************************************************************
+
+; external defines
+; DAC_SAMPLES 	EQUR > d2
+; VGM_DATA 		EQUR > a1
+; DELAY_RET 	EQUR > a1
+; VAR1 EQU 0
+; memory variables
+; VAR1(a7) = count
+
+DAC_WRITE1_2: ; 54 clocks from start
+	move.b #$2A,$A04000							;[20]
+	and.w #15,d0								;[ 8]
+	addq.w #1,d0								;[ 4]
+	move.w d0,VAR1(a7)							;[12]
+	nop											;[ 4]
+DAC_WRITE1_2L: ; 102 clocks from start
+	move.b (DAC_SAMPLES)+,$A04001				;[20]
+	lsr.w #1,d0									;[ 8]
+	moveq #15,d0								;[ 4]
+	and.b (VGM_DATA),d0							;[ 8]
+	addq.l #1,CTRL_DELAY						;[ 8]
+	addq.w #1,SAMPLE_LAG						;[ 4]
+	lea DAC_WRITE1_2LRET1(pc),DELAY_RET			;[ 8]
+	sub.w d0,SAMPLE_LAG							;[ 4]
+	bcs.s DAC_WRITE1_2DELAY						;[ 8]
+DAC_WRITE1_2LRET1: ; 1:0 clocks from start
+	moveq #24,d0								;[ 4]
+	lsr.l d0,d0									;[56]
+	move.b (VGM_DATA)+,d0						;[ 8]
+	lsr.w #4,d0									;[14]
+	addq.l #1,CTRL_DELAY						;[ 8]
+	addq.w #1,SAMPLE_LAG						;[ 4]
+	lea DAC_WRITE1_2LRET2(pc),DELAY_RET			;[ 8]
+	; 1:102 clocks from start
+	move.b (DAC_SAMPLES)+,$A04001				;[20]
+	sub.w d0,SAMPLE_LAG							;[ 4]
+	bcs.s DAC_WRITE1_2DELAY						;[ 8]
+DAC_WRITE1_2LRET2: ; 1:134 clocks from start
+	subq.w #1,VAR1(a7)							;[16]
+	bcc.s DAC_WRITE1_2LC						;[ 8]
+	lea PLAY_LOOP(pc),DELAY_RET					;[ 8]
+	jmp (DELAY_RET)								;[ 8]
+DAC_WRITE1_2LC:									;[ 2]
+	; 1:160 clocks from start
+	moveq #31,d0								;[ 4]
+	lsr.l d0,d0									;[70]
+	moveq #10,d0								;[ 4]
+	lsr.l d0,d0									;[28]
+	bra.s DAC_WRITE1_2L							;[10]
+DAC_WRITE1_2DELAY:								;[ 2]
+	bra DELAY_CODE_DAC							;[10]

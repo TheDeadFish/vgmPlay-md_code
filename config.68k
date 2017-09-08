@@ -1,0 +1,3 @@
+cfg_repeat equ 8
+cfg_delay equ 12
+cfg_minui equ 16

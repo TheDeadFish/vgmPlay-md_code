@@ -1,0 +1,65 @@
+	include "libs\genedef.68k"
+	include "libs\macros.68k"
+	
+	; exception table
+	dc.l 	STKBSE, STARTUP, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT		; 00
+	dc.l 	EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT		; 20
+	dc.l 	EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT, EXCEPT		; 40
+	dc.l 	EXCEPT, EXCEPT, EXCEPT, EXCEPT, HINT, EXCEPT, VINT, EXCEPT			; 60
+
+	; exception handler
+	if ~def(def_vint)|~def(def_hint)|~def(def_except)
+		if ~def(def_vint) 
+		VINT: endif
+		if ~def(def_hint)
+		HINT: endif
+		if ~def(def_except)
+		EXCEPT:	endif
+		death_loop
+	endif	
+	
+	; security code
+STARTUP:
+	move.b $A10001,d0
+	andi.b #$0f,d0
+	beq.s @skipsec
+	move.l #$53454741,$A14000
+@skipsec
+	jmp START
+	
+	; program header
+	align 	$100
+	dc.b 	'SEGA MEGA DRIVE '
+	dc.b 	ProgDate
+	align		$120
+	dc.b	ProgName
+	align 	$150
+	dc.b 	ProgName
+	align	$190
+
+	; low ram alloc
+	VARLOW1: set $0
+	VARLOW2_: equ VARLOW2
+	VARLOW2: set $ff0000
+var_low_1 macro 
+\1 equ VARLOW2_+VARLOW1
+VARLOW1: set VARLOW1+\2	
+	endm	
+var_low_2 macro 
+\1 equ VARLOW2
+VARLOW2: set VARLOW2+\2	
+	endm
+
+	; high memory alloc
+	STKBSE: equ (VARHI2_+VARHI1)&~1
+	VARHI1: set $0
+	VARHI2_: equ VARHI2
+	VARHI2: set $0
+var_hi_1 macro 
+VARHI1: set VARHI1-\2	
+\1 equ VARHI2_+VARHI1
+	endm
+var_hi_2 macro 
+VARHI2: set VARHI2-\2
+\1 equ VARHI2
+	endm

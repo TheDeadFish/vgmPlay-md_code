@@ -1,0 +1,79 @@
+****************************************************************************
+*
+*	Quarter nibble dac decoder for vgm play V3.00,  
+*	file version : 	0.01
+* 	created : 		17/10/09
+*	modified :		12/12/12 
+*	Code is derived from HalfNibb.68k,
+* 	Replace:	WRITE1_4, WRITE1_8
+*				delay data Mask 3 -> 1
+*				count Mask 3 -> 7
+*								
+*
+****************************************************************************
+
+; external defines
+; DAC_SAMPLES 	EQUR > d2
+; CTRL_DELAY 	EQUR > d2
+; VGM_DATA 		EQUR > a1
+; DELAY_RET 	EQUR > a1
+; VAR1 EQU 0
+; VAR2 EQU 2
+; VAR3 EQU 4
+; memory variables
+
+;count 	   EQUR 0
+delay_data EQU 1
+delay_base EQU 2
+
+DAC_WRITE1_8: ; 54 clocks from start
+	move.l #$A04000,a0							;[12]
+	move.b #$2A,(a0)+							;[12]
+	move.l a7,a1 ; copy stack pointer			;[ 4]
+	move.b (VGM_DATA)+,(a1)+ ; count			;[12]
+	move.b (VGM_DATA)+,d1 ; delay_data			;[ 8]
+	move.b d1,(a1)+ ; delay_data				;[ 8]
+	; 110 clocks from start
+	move.b (DAC_SAMPLES)+,(a0)					;[12]
+	and.w #15,d0								;[ 8]
+	move.w d0,(a1) ; delay_base					;[ 8]
+	and.w #1,d1									;[ 8]
+	add.w d1,d0									;[ 4]
+	lea DAC_WRITE1_8L(pc),DELAY_RET				;[ 8]
+	addq.w #1,SAMPLE_LAG						;[ 4]
+	sub.w d0,SAMPLE_LAG							;[ 4]
+	bcs.s DAC_WRITE1_8DELAY						;[ 8]
+	
+DAC_WRITE1_8L: ; 0 clocks from loop start
+	addq.l #1,CTRL_DELAY						;[ 8]
+	move.b delay_data(a7),d0 					;[12]
+	lsr.l #1,d0									;[10]
+	moveq #7,d1									;[ 4]
+	and.b (a7),d1 ; count						;[ 8]
+	bne.s DAC_WRITE1_8L1						;[ 8]
+	move.b (VGM_DATA)+,d0 ; delay_data			;[ 8]
+	nop											;[ 4]
+DAC_WRITE1_8L2: ; 62 clocks from start
+	move.b d0,delay_data(a7)  	 				;[12]
+	and.w #1,d0									;[ 8]
+	add.w delay_base(a7),d0 					;[12]
+	lea DAC_WRITE1_8RET(pc),DELAY_RET			;[ 8]
+	; 102 clocks from start, equivalent to
+	; move.b (DAC_SAMPLES)+,(a0) at 110 clocks 	
+	move.b (DAC_SAMPLES)+,$A04001				;[20]
+	addq.w #1,SAMPLE_LAG						;[ 4]
+	sub.w d0,SAMPLE_LAG							;[ 4]
+	bcs.s DAC_WRITE1_8DELAY						;[ 8]
+DAC_WRITE1_8RET: ; 138 clocks from loop start
+	subq.b #1,(a7) ; count						;[12]
+	bne.s DAC_WRITE1_8LC						;[ 8]
+	lea PLAY_LOOP(pc),DELAY_RET					;[ 8]
+	jmp (DELAY_RET)								;[ 8]
+DAC_WRITE1_8LC: ; 160 clocks from loop start
+	nop											;[ 4]
+	bra.s DAC_WRITE1_8L							;[10]
+; hack bits
+DAC_WRITE1_8DELAY: 								;[ 2]
+	bra DELAY_CODE_DAC							;[10]
+DAC_WRITE1_8L1:									;[ 2]
+	bra.s DAC_WRITE1_8L2						;[10]

@@ -1,0 +1,120 @@
+*******************************************************************
+*
+*	User interface code
+*
+*******************************************************************
+	include "vgmplay\vgmplay.68k"
+	
+PLAY_BEGIN:	
+	z80_busreq
+	pad1_init
+	bsr GET_KEY
+	clr.w CurrentTrack
+	bra PLAY_TRACK
+PREV_TRACK:
+	subq.w #2, CurrentTrack
+NEXT_TRACK:
+	addq.w #1, CurrentTrack
+PLAY_TRACK:
+	; play current track
+	lea VGM_LIST+2,a0
+	move.w CurrentTrack,d0
+	wrap_valw d0, (a0)
+	move.w d0, CurrentTrack
+	lsl.w #2,d0
+	move.l 2(a0,d0.w),a0
+	bsr VGM_INIT
+	tst.b d0
+	bne @error
+	bsr SOUND_OFF
+	
+	; perform delay
+	move.l 12,d0
+	beq.s NEXT_TRACK
+@loop
+	bsr GET_KEY						;[94]
+	bne TEST_KEYS					;[10]
+	moveq #22,d1					;[ 4]
+	lsr.l d1,d1						;[52]
+	subq.l #1,d0					;[ 6]
+	bne.s @loop						;[10]	
+	bra.s NEXT_TRACK
+	
+@error
+	; display error
+	if DEF(PrintCR)
+	subq.w #1,d0
+	bne.s @dataerr
+	PrintCR "Vgm Header Error, not vgm?"
+	death_loop
+@dataerr
+	PrintCR "Vgm Data Error, I have bugs?"
+	endc
+	death_loop
+
+; Key processing code
+PRESSED_KEY:
+	adda.l #VGM_MEMSIZE+4,sp
+	bsr SOUND_OFF
+	bra.s TEST_KEYS
+UI_WAITKEY:
+	bsr GET_KEY
+	beq.s UI_WAITKEY
+TEST_KEYS:
+	bsr WAIT_KEYUP
+	btst #5,d1
+	bne PLAY_TRACK
+	moveq #5,d0
+	and.b d1,d0
+	bne PREV_TRACK
+	and #10,d1
+	bne NEXT_TRACK
+	bra UI_WAITKEY
+
+; controller reading code	
+GET_KEY:							;[94]
+	move.b $A10003,d1				;[16]
+	not.b d1						;[ 4]
+	move.b KEY_STATE,d2				;[16]
+	move.b d1,KEY_STATE				;[16]
+	eor.b d1,d2						;[ 4]
+	and.b d2,d1						;[ 4]
+	rts								;[16]
+WAIT_KEYUP:
+	; delay 127800 clocks!
+	move.l #7987,d0
+WAIT_KEYUPD:
+	subq.l #1,d0					;[ 6]
+	bne.s WAIT_KEYUPD				;[10]
+	; check for key release
+	move.b $A10003,d0				;[16]
+	not.b d0						;[ 4]
+	and.b #63,d0					;[ 8]
+	bne.s WAIT_KEYUP				;[10]
+	move.l #7987,d0
+WAIT_KEYUPD1:
+	subq.l #1,d0					;[ 6]
+	bne.s WAIT_KEYUPD1				;[10]
+	rts
+
+SOUND_OFF:
+	; reset z80
+	move.w d1,-(a7)
+	; reset YM2612
+	move.w #$0000,$A11200
+	moveq #31,d0
+	lsr.l d0,d1
+	lsr.l d0,d1
+	lsr.l d0,d1
+	move.w #$0100,$A11200
+	; Make psg silent
+	move.l #$c00011,a0
+	move.b #%10011111,(a0)
+	move.b #%10111111,(a0)
+	move.b #%11011111,(a0)
+	move.b #%11111111,(a0)
+	move.w (a7)+,d1
+	rts
+
+CurrentTrack	equ VGM_RAM+0
+KEY_STATE		equ VGM_RAM+2

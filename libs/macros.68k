@@ -1,0 +1,40 @@
+wrap_valw macro
+	cmp.w (a0), d0
+	bcs.s @wrap_valw1\@
+	bpl.s @wrap_valw2\@
+	add.w (a0), d0
+	bra.s @wrap_valw1\@
+@wrap_valw2\@
+	sub.w (a0), d0
+@wrap_valw1\@
+	endm
+
+death_loop macros
+@death_loop\@ bra.s @death_loop\@
+
+; extending reads
+ReadZBW	macro				;[8+]
+	clr.w \2				;[ 4]
+	move.b \1, \2			;[4+]
+	endm
+ReadZBL	macro				;[8+]
+	moveq #0, \2			;[ 4]
+	move.b \1, \2			;[4+]
+	endm
+
+; missalinged reads
+ReadBig16 macro				
+	move.b (\1)+,-(SP)
+	move.w (SP)+,\2
+	move.b (\1)+,\2
+	endm
+ReadBig24 macro
+	ReadZBL (\1)+, \2
+	swap \2
+	ReadBig16 \1, \2
+	endm
+ReadBig32 macro
+	ReadBig16 \1, \2
+	swap \2
+	ReadBig16 \1, \2
+	endm
