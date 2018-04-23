@@ -5,6 +5,7 @@ ProgDate equs "(C)DFSW 2015-SEP"
 	include "config.68k"
 	include "message.asm"
 	include "vgmPlay\interact.68k"
+	include "image.68k"
 
 START:
 	bsr InitVdp

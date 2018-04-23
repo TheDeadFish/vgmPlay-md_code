@@ -59,7 +59,7 @@ PrintString:
 	move.l #data_port,a1
 	move.w CurCol,d0
 	move.w CurRow,d1
-	vdp_planeA_xy d1, d0, 4(a1)
+	vdp_planeB_xy d1, d0, 4(a1)
 @loop:
 	moveq #0,d2
 	move.b (a0)+, d2
@@ -98,7 +98,7 @@ ClearToEnd:
 	move.l #$c00000,a1
 	move.w CurCol,d0
 	move.w CurRow,d1
-	vdp_planeA_xy d1, d0
+	vdp_planeB_xy d1, d0
 @loop0
 	move.l d1, 4(a1)
 @loop1
@@ -106,7 +106,7 @@ ClearToEnd:
 	addq.w #1,d0
 	cmp.b #40,d0
 	bcs.s @loop1
-	vdp_plane_next d1, #planeA_last, @endloop
+	vdp_plane_next d1, #planeB_last, @endloop
 	moveq #0,d0
 	bra.s @loop0
 @endloop

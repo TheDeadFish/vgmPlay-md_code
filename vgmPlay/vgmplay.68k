@@ -51,6 +51,9 @@ VGM_INIT:
 	bne.s VGM_IERR
 	cmpi.l #$00000100,4(a0)
 	bne.s VGM_IERR
+	; display image
+	move.l 20(a0),a1
+	jsr LOAD_IMAGE
 	; display gd3 info
 	move.l 16(a0),a1
 	adda.l a0,a1
