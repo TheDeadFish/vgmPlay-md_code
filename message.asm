@@ -12,7 +12,7 @@ Print_Message:
 	
 	; full user interface
 @fullui:
-	PrintCR "MEGADRIVE VGM PLAYER V3.30", $A
+	PrintCR "MEGADRIVE VGM PLAYER V3.41", $A
 	move.l VGM_LIST,d0
 	cmp.w #1,d0
 	beq.s @SkipSeek

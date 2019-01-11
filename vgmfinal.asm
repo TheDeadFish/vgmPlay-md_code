@@ -1,4 +1,4 @@
-ProgName equs "VGM PLAYER V3.31"
+ProgName equs "VGM PLAYER V3.41"
 ProgDate equs "(C)DFSW 2015-SEP"
 	include "libs\genesis.68k"
 	include "libs\initvdp.68k"

@@ -237,10 +237,10 @@ VGM_PLAY_TAB:
 	dc.w VGM_ERROR
 	dc.w VGM_ERROR
 	dc.w VGM_ERROR
-	dc.w VGM_ERROR
-	dc.w VGM_ERROR
-	dc.w VGM_ERROR
-	dc.w VGM_ERROR
+	dc.w VGM_PLAY_DELAYE
+	dc.w VGM_PLAY_DELAYE
+	dc.w VGM_PLAY_DELAYE
+	dc.w VGM_PLAY_DELAYE
 	dc.w VGM_PLAY_DAC1_1
 	dc.w VGM_PLAY_OTHER
 ; ---- VGM_PLAY loop -----
