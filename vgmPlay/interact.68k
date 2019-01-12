@@ -46,9 +46,11 @@ PLAY_TRACK:
 	subq.w #1,d0
 	bne.s @dataerr
 	PrintCR "Vgm Header Error, not vgm?"
+	PrintHex32 a0
 	death_loop
 @dataerr
 	PrintCR "Vgm Data Error, I have bugs?"
+	PrintHex32 a4
 	endc
 	death_loop
 

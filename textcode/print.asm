@@ -116,4 +116,32 @@ ClearToEnd:
 CurCol equ PrintRam+0
 CurRow equ PrintRam+2
 
+PrintHex32:
+	link.w a6,#-12
+	move.l 8(a6),d1
+	lea -9(a6),a1
+	move.l a1,d0
+	lea -1(a6),a0
+	clr.b (a0)
+@L3
+	subq.l #1,a0
+	move.b d1,d0
+	and.b #15,d0
+	cmp.b #10,d0
+	ble @L2
+	addq.b #8,d0
+@L2
+	add.b #48,d0
+	move.b d0,(a0)
+	ror.l #4,d1
+	cmp.l a0,a1
+	bcs @L3
+	PrintStr a0
+	unlk a6
+	rts
 
+PrintHex32 macro
+	pea (\1)
+	jsr PrintHex32
+	addq #4, a7
+	endm
